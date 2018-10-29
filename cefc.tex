@@ -16,13 +16,11 @@
 \author{\IEEEauthorblockN{Lukas Korous\IEEEauthorrefmark{1}, Pavel Karban\IEEEauthorrefmark{1}}
 \IEEEauthorblockA{\IEEEauthorrefmark{1}University of West Bohemia, Faculty of Electrical Engineering, Pilsen, Czech Republic}
 % <-this % stops an unwanted space
-\thanks{Manuscript received ?????; revised ?????. 
-Corresponding author: L. Korous (email: lukas.korous@gmail.com).}}
-
+\thanks{Manuscript received November 3, 2018; Corresponding author: L. Korous (email: lukas.korous@gmail.com).}}
+	
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-The discontinuous Galerkin (DG) method is a favorable alternative to the finite volume (FV) method, which is often used for conservation laws. DG methods offer higher order accuracy and reduced diffusion compared to the finite volume method while keeping the scheme highly parallelizable. We aim at making the implementation parameter-free, applicable to all possible problems. To achieve that, instead of using standard ways to achieve the zero divergence constraint on the magnetic field component, we use here an exactly divergence free basis, and for the numerical flux and flux limiting algorithms we offer several possibilities, mainly HLLD numerical flux, and Barth-Jespersen or Vertex-based flux limiting techniques, all working without parameters. The code works for 3 spatial dimensions in fully distributed manner, and is available from a public software
-repository.
+The discontinuous Galerkin (DG) method is a favorable alternative to the finite volume (FV) method, which is often used for conservation laws. DG methods offer higher order accuracy and reduced diffusion compared to the finite volume method while keeping the scheme highly parallelizable. We aim at making the implementation parameter-free, applicable to all possible problems. To achieve that, instead of using standard ways to achieve the zero divergence constraint on the magnetic field component, we use here an exactly divergence free basis, and for the numerical flux and flux limiting algorithms we offer several possibilities, mainly HLLD numerical flux, and Barth-Jespersen or Vertex-based flux limiting techniques, all working without parameters. The code works for 3 spatial dimensions in fully distributed manner, and is available from a public software repository.
 \end{abstract}
 
 % Note that keywords are not normally used for peerreview papers.
@@ -39,32 +37,40 @@ Numerical simulation, finite element method, MHD equations, adaptivity, disconti
 
 \section{Introduction}
 The term magnetohydrodynamics (MHD) covers all physical phenomena that involve both electromagnetic (EM) field and a fluid that carries the EM field. Such phenomena are very interesting, yet very complex to study. The behavior of such a fluid is utilized in some industrial applications - liquid-metal cooling of nuclear reactors, magnetic fluid in dampers, sensors for precise measuring of angular velocities, etc. Such phenomena occur in nature as well - the most significant of which are the processes that take place inside and on the surface of stars.
-\subsection{Magnetohydrodynamics in Astrophysics}
+\section{Magnetohydrodynamics in Astrophysics}
 There are several phenomena in the universe that we can look at as magnetohydrodynamic in nature - planets consisting of metals, interplanetary space, but mainly - stars. If we talk about the nearest star - and the only one we are able to study well enough - the Sun - these phenomena include those that occur in the Sun's photosphere (the layer of Sun that is visible): Sun spots, but also phenomena that occur above the Sun (further from the center of the Sun): in Sun's chromosphere, or even corona (solar flares) - even phenomena that originate from the Sun, but then spread through our solar system - solar winds, space weather. All these phenomena have a large impact on the lives of all of us. One such event is captured in\ref{figure:observation}. For example solar flares (that are often followed by ejection of mass out of the Sun - the so called coronal mass ejections - CMEs) have impact on the Earth's magnetic field which in turn has impact on the electronic communication down on Earth (because the communication satellites used for transmissions may be damaged by the disturbances in the magnetic field). Also people operating at high altitudes, both in airplanes and manned space missions are exposed to the energetic particles coming from the Sun (this term is sometimes called \textit{cosmic rays}). For all the above reasons, it is of great importance to understand the phenomena of space weather, and other MHD phenomena that occur in space.
-\begin{figure}[!t]
+\begin{figure}[!h]
 \centering
-\includegraphics[width=2.5in]{figure2fromHalpha.jpg}
+\includegraphics[width=1.0\columnwidth]{figure2fromHalpha.jpg}
 \caption{Observation of a limb event above the sun's surface. $H\alpha$ slit-jaw is the middle (b) part, taken from \cite{miraClanek}.}
 \label{figure:observation}
 \end{figure}
 
-\subsection{Numerical simulation of magnetohydrodynamics}
-From the numerical perspective, to investigate such phenomena is to bring the complexity of multiple scales present in the physical world - magnetic reconnection occurs at substantially different scales than e.g. the solar flares. To handle this numerically with adequate resolution, and reasonable computational costs, the implementation must be able to limit the number of degrees of freedom used for the discretization to such that yield the largest accuracy increase - namely, in this work, this is achieved via a state-of-the-art Adaptive Mesh Refinement approach.
-\subsection{Aim of this work}
 Main goal that was set for this work is implementation of a software package, capable of numerically solving the magnetohydrodynamic equations with the following attributes:
 \begin{itemize}
 	\item The code must implement mathematically correct and clean methods, preferably with no parameter-dependent algorithms
-	\item The code must allow for a broad spectrum of solution attributes occurring (shocks, oscillations, high energies, ...)
+	\item The code must allow for a broad spectrum of solution attributes occurring (shocks, oscillations, high energies)
 	\item The code must be able to capture very fine details of the solution through higher resolution, in reasonable computing time
 	\item The code must be able to run a large-scale simulations, for which a single computer is not sufficient, and utilization of modern distributed computing approach is a must
 	\item The code must be easy to use for the physicists, must be written using industry-standard modern object-oriented programming language
 \end{itemize}
-\subsection{Discontinuous Galerkin method}
-We look at the Discontinuous Galerkin method (DG) - which was chosen in order to deliver the first and second of the above requirement (handling sharp fronts, discontinuities and the like with mathematical cleanliness), and give the entire process from the integral equations down to algorithms performing basic operations. Pitfalls of the numerical solution of the MHD equations (divergence constraint, slope limiting), and chosen way of solving them is given as well, while still keeping the above requirements in mind.
-\subsection{Automatic Mesh Refinement}
-Since the biggest challenge is the satisfaction of the requirement of both the fine resolution of the solution, and the capability of running large-scale simulations on modern distributed computing architecture - while still providing all the other attributes of the implemented code. The approach to this, which involves mainly the Adaptive Mesh Refinement technique (AMR) together with Domain Decomposition technique, is presented and implemented. And finally the verifications, and benchmarks and actual usage on an astrophysical problem are presented.
 
-\section{Discontinuous Galerkin Method}
+\section{Mathematical Model}
+The system of equations we are interested in solving is the system of ideal MHD equations in the form
+\begin{eqnarray}
+\nonumber \pds{\rho}{t} & = & - \nabla\cdot\left(\bfpi\right),\\
+\nonumber \pds{\bfpi}{t} & = & - \nabla\cdot\left(\bfpi\otimes\bfu\right) + \nabla\cdot\lo\frac{1}{\mu_0}\bfB\bfB - \frac{B^2}{2}\mathrm{I}\ro - \nabla\,p,\\
+\nonumber \pds{U}{t} & = & -\nabla\cdot\left[\bfpi\lo \frac{u^2}{2} + e\ro + p \bfu\right],\\
+\nonumber \pds{\bfB}{t} & = & - \nabla \times \lo \bfu \otimes \bfB - \bfB \otimes \bfu \ro.
+\end{eqnarray}
+Here, $\rho$ is plasma density, $\bfpi$ plasma momentum, $\bfu$ plasma velocity, $p$ plasma pressure. $U$ is the total energy, $\bfB$ is magnetic flux density, and $e$ denotes internal energy.
+
+
+\section{Numerical Solution}
+From the numerical perspective, to investigate such phenomena is to bring the complexity of multiple scales present in the physical world - magnetic reconnection occurs at substantially different scales than e.g. the solar flares. To handle this numerically with adequate resolution, and reasonable computational costs, the implementation must be able to limit the number of degrees of freedom used for the discretization to such that yield the largest accuracy increase - namely, in this work, this is achieved via a state-of-the-art AMR approach.
+
+We look at the Discontinuous Galerkin method (DG, \cite{mhdDg}, \cite{mhdDg2}) - which was chosen in order to deliver the first and second of the above requirement (handling sharp fronts, discontinuities and the like with mathematical cleanliness), and give the entire process from the integral equations down to algorithms performing basic operations. Pitfalls of the numerical solution of the MHD equations (divergence constraint, slope limiting), and chosen way of solving them is given as well, while still keeping the above requirements in mind.
+
 We start with the ideal MHD equations in the conservative form
 \be
 \label{conservativeGeneric} \pds{\mrPsi}{t} + \nabla \cdot \mrF\lo\mrPsi\ro = \mrS,
@@ -73,48 +79,50 @@ where we have
 \begin{align}
 \nonumber
 \mrF_i & =  \lo\begin{array}{c} \pi_i \\ \frac{\pi_1 \pi_i}{\rho} - B_1 B_i + \frac12 \delta_{1i} \lo p + U_m\ro \\ \frac{\pi_2 \pi_i}{\rho} - B_1 B_i + \frac12 \delta_{2i} \lo p + U_m\ro \\ \frac{\pi_3 \pi_i}{\rho} - B_1 B_i + \frac12 \delta_{3i} \lo p + U_m\ro \\ \frac{\pi_i}{\rho} \lo \frac{\gamma}{\gamma - 1} p + U_k\ro + \frac{2}{\rho} \varepsilon_{ijk} \lo \pi_k B_i - \pi_i B_k\ro B_j  \\ \frac{\pi_i B_1 - \pi_1 B_i}{\rho}  \\ \frac{\pi_i B_2 - \pi_2 B_i}{\rho} \\ \frac{\pi_i B_3 - \pi_3 B_i}{\rho} \\ \end{array}\ro,\\
-\mrPsi & =  \lo\begin{array}{c}\rho \\ \pi_1 \\ \pi_2 \\ \pi_3 \\ U \\ B_1 \\ B_2 \\ B_3 \\ \end{array}\ro,\ 
-\mrS =  \lo\begin{array}{c}0 \\ \rho g_1 \\ \rho g_2 \\ \rho g_3 \\ \bfpi \cdot \bfg \\ 0 \\ 0 \\ 0 \\ \end{array}\ro,
 \end{align}
+\be
+\mrPsi = \lo\rho, \pi_1, \pi_2, \pi_3, U, B_1, B_2, B_3\ro^T,
+\ee
+\be
+\mrS = \lo0, \rho g_1, \rho g_2, \rho g_3, \bfpi \cdot \bfg, 0, 0, 0\ro^T.
+\ee
 where $\varepsilon_{ijk}$ is the Levi-Civita symbol, and $\delta_{ij}$ the Kronecker delta.
-\subsection{Weak formulation}
+
 Weak formulation reads
 \be
 \label{WeakFinal} \int_{\Omega_{t}} \pds{\mrPsi}{t} \mrv - \int_{\Omega_{t}}\mrF\lo\mrPsi\ro \lo\nabla \cdot \mrv\ro + \int_{\partial\Omega_{t}} \lo\mrF\lo\mrPsi\ro \cdot \bfn \ro\mrv = \int_{\Omega_{t}} \mrS \mrv,
 \ee
 where the terms $\mrF\lo\mrPsi\ro \lo\nabla \cdot \mrv\ro; \lo\mrF\lo\mrPsi\ro \cdot \bfn \ro\mrv$ are meant as a component-wise multiplication, $\Omega_t$ is a domain occupied by the fluid at time $t$, and $\mrv$ are test functions from a suitable Sobolev space.
-\subsection{Discretization}
-We employ the standard \textit{broken Sobolev space}, obtaining thus a finite dimensional space of basis\/test functions defined on hexahedral elements. Since we are interested in large scale problems, the domain is decomposed using standard approaches to do so - using the MPI communication layer implemented in the deal.II and Trilinos frameworks.
-\begin{figure}[!t]
-		\begin{center}
-			\includegraphics[width=2.5in]{cube.jpg}
+
+We employ the standard \textit{broken Sobolev space}, obtaining thus a finite dimensional space of basis\/test functions defined on hexahedral elements. Since we are interested in large scale problems, the domain is decomposed using standard approaches to do so - using the MPI communication layer implemented in the deal.II \cite{deal} and Trilinos \cite{trilinos} frameworks. 
+\begin{figure}[ht]
+	\begin{center}
+		\includegraphics[width=0.85\columnwidth]{cube.jpg}
 		\caption{Cubical domain $\Omega$ with color-coded processor-owned elements.}
 		\label{figure:domainDecomposition}
-		\end{center}
-	\end{figure}\vspace{-5mm}
-	
-\subsection{Divergence-free FE space}
-The divergence-free constraint of the magnetic field, $\nabla \cdot \bfB = 0$ (Gauss's law) is not enforced by the solution of the problem \ref{WeakFinal}. Therefore, we need to perform additional work to be sure that we do not have a non-physical solution in the sense that the constraint is not satisfied.
+	\end{center}
+\end{figure}
+Cubical domain $\Omega$ with color-coded processor-owned elements is visible on Fig. \ref{figure:domainDecomposition}.
+
+\subsection*{Divergence-free FE Space}
+The divergence-free constraint of the magnetic field, $\nabla \cdot \bfB = 0$ (Gauss's law) is not enforced by the solution of the problem~(\ref{WeakFinal}). Therefore, we need to perform additional work to be sure that we do not have a non-physical solution in the sense that the constraint is not satisfied.
+\begin{figure}[ht]
+	\begin{center}
+		\includegraphics[width=1.0\columnwidth]{divFree.jpg}
+		\caption{One of the divergence-free basis functions.}
+		\label{figure:divFree}
+	\end{center}
+\end{figure}
 There are two often used approaches to handle this problem - the Constraint-Transport (CT) method, and divergence cleaning. The first one is not suitable for this work, as it constraints the triangulation in such a way, that implementing Adaptive Mesh Refinement would be very complicated, if possible at all. The second approach, the divergence cleaning methods need additional postprocessing step which may be omitted for the sake of calculation efficiency.
 The approach taken in this work is to replace the standard FE space with such basis functions for the magnetic field component ($B$) with a vector-valued (3-dimensional) space $V_h^B$ of functions that have exactly
 \be
 \nabla \cdot \mrvh^B = 0,\ \ \mrvh^B\in V_h^B,
 \ee
-where these functions are as before discontinuous on element interfaces $\Gamma_{ij}$. An example of such a function is in Figure \ref{figure:divFree}
-\begin{figure}[!t]
-		\begin{center}
-			\includegraphics[width=2.5in]{divFree.jpg}
-		\caption{One of the divergence-free basis functions.}
-		\label{figure:divFree}
-		\end{center}
-	\end{figure}\vspace{-5mm}
+where these functions are as before discontinuous on element interfaces $\Gamma_{ij}$. An example of such a function is in Fig. \ref{figure:divFree}.
 	
-\subsection{Slope limiting}
-It is well known that the Discontinuous Galerkin method exhibits nonphysical spurious oscillations in the vicinity of sharp discontinuities. Noteworthy is the fact, that with continuous Finite Element spaces, the situation is even worse, as the oscillations tend to propagate through the computational domain. With the DG method, the problem is localized to a single layer of elements bordering any sharp front. This behavior is not acceptable, and measures must be taken to eliminate such oscillations - methods aiming at solving this are usually labeled as flux limiters, slope limiters, or shock capturing schemes.
-\subsubsection*{}
-These methods can be categorized according to multiple aspects. Out of these, two are important from the perspective of this work. First categorization is whether the approach changes the equations by introducing additional term that 'smoothes' the solution near the sharp front (this may be understood as a form of \textit{artificial viscosity / resistivity}). In this work, such an approach is not preferred, as we aim at implementing a generally usable solver, where extensive analysis of the impact of a change in the governing equations for the particular problem is not possible.
+\subsection*{Slope Limiting}
+It is well known that the Discontinuous Galerkin method exhibits nonphysical spurious oscillations in the vicinity of sharp discontinuities. Methods to amend that can be categorized according to multiple aspects. Out of these, two are important from the perspective of this work. First categorization is whether the approach changes the equations by introducing additional term that 'smoothes' the solution near the sharp front. In this work, such an approach is not preferred, as we aim at implementing a generally usable solver, where extensive analysis of the impact of a change in the governing equations for the particular problem is not possible.
 
-\subsubsection{Vertex-based limiter}
 Introduced by D. Kuzmin in \cite{KuzminVertex}, the Vertex-based limiter aims at being an improvement over the Barth-Jespersen limiter. It considers the solution in the form
 \be
 \label{slopeLimSln}
@@ -133,27 +141,26 @@ where in this case $u_i^{min}, u_i^{min}$ are defined in such a way that for eac
 \be
 u_i^{max} = \max\left\{u_c, u_i^{max}\right\},\ \ u_i^{min} = \min\left\{u_c, u_i^{min}\right\}.
 \ee
-This slope limiting technique proves to have all the required attributes from the perspective of this work.
-A comparison between an unlimited (\ref{figure:unlimited}) and limited (\ref{figure:limited}) solution is given in figures in this section.
-\begin{figure}[!t]
-		\begin{center}
-			\includegraphics[width=2.5in]{nl6.jpg}
-		\caption{Unlimited solution.}
-		\label{figure:unlimited}
-		\end{center}
-	\end{figure}
-	
-\begin{figure}[!t]
-		\begin{center}
-			\includegraphics[width=2.5in]{l1.jpg}
-		\caption{Limited solution.}
-		\label{figure:limited}
-		\end{center}
-	\end{figure}
-	
-\section{Automatic Mesh Refinement}
-As the Adaptive Mesh Refinement (AMR) is a very important algorithm in the overall numerical solution, handling the multi-scale aspect of the studied problems, in this chapter, a description of what needs to be taken care of for the DG method, in the distributed settings, and what concrete decisions were made during this work, and justification of these in light of the requirements on the numerical solution.
-The general schema of any Adaptive Mesh Refinement algorithm is described in the algorithm \ref{algorithm:AMRGen}:
+This slope limiting technique proves to have all the required attributes from the perspective of this work. A comparison between an unlimited and limited solution is given in Figures (\ref{figure:unlimited}) and (\ref{figure:limited}), respectively.
+\begin{figure}[!h]
+	\begin{center}
+		\includegraphics[width=\columnwidth]{nl6.jpg}
+	\caption{Unlimited solution.}
+	\label{figure:unlimited}
+	\end{center}
+\end{figure}
+\begin{figure}[!h]
+	\begin{center}
+		\includegraphics[width=\columnwidth]{l1.jpg}
+	\caption{Limited solution.}
+	\label{figure:limited}
+	\end{center}
+\end{figure}
+
+\subsection*{Automatic Mesh Refinement}
+Since the biggest challenge is the satisfaction of the requirement of both the fine resolution of the solution, and the capability of running large-scale simulations on modern distributed computing architecture - while still providing all the other attributes of the implemented code. The approach to this, which involves mainly the Adaptive Mesh Refinement technique (AMR) together with Domain Decomposition technique, is presented and implemented. And finally the verifications, and benchmarks and actual usage on an astrophysical problem are presented.
+
+The AMR is a very important algorithm in the overall numerical solution, handling the multi-scale aspect of the studied problems. The general schema of any AMR algorithm is described in the Algorithm \ref{algorithm:AMRGen}. The \textit{solution acceptance criteria} is usually either spatial error estimate threshold, or number of elements, etc.
 \ \\
 \begin{algorithm}
  \KwData{Mesh $T_0$}
@@ -173,20 +180,27 @@ The general schema of any Adaptive Mesh Refinement algorithm is described in the
  \caption{Generic AMR algorithm}
 \label{algorithm:AMRGen}
 \end{algorithm}
-In \ref{algorithm:AMRGen}, \textit{solution acceptance criteria} is usually either spatial error estimate threshold, or number of elements, etc.
 
 \section{Results}
 Several benchmarks (MHD Blast, Orszag-Tang vortex) - \ref{figure:blastFinal}, \ref{figure:ot}, as well as a simulation of a flux-rope based on Titov-Demoulin model (\ref{figure:td}) have been done.
+All simulations show correct and well resolved solution patterns, and no non-physical oscillations appear in the solution. The automatic mesh refinement (AMR) framework clearly resolves the areas with sharp gradients well, and the selected element refinements lead to a dramatic reduction of the computation cost while maintaining the solution resolution.
 \begin{figure}
 	\begin{center}
-		\includegraphics[width=2.5in]{ref-result.jpg}
+		\includegraphics[width=1.0\columnwidth]{blast-adapt-full6.jpg}
+		\caption{MHD Blast problem, obtained $\rho$ distribution, $t \approx 0.2$ (left), $t \approx 1.0$ (right).}
+		\label{figure:blastFinal}
+	\end{center}
+\end{figure}
+\begin{figure}
+	\begin{center}
+		\includegraphics[width=1.0\columnwidth]{ref-result.jpg}
 	\caption{MHD Blast problem, obtained $\rho$ distribution, $t \approx 0.2$ (left), $t \approx 1.0$ (right).}
 	\label{figure:blastFinal}
 	\end{center}
 \end{figure}
 \begin{figure}
 	\begin{center}
-		\includegraphics[width=2.5in]{ot.jpg}
+		\includegraphics[width=1.0\columnwidth]{ot.jpg}
 	\caption{Orszag-Tang problem, obtained $p$ distribution at time $t \approx 0.5$.}
 	\label{figure:ot}
 	\end{center}
@@ -194,7 +208,7 @@ Several benchmarks (MHD Blast, Orszag-Tang vortex) - \ref{figure:blastFinal}, \r
 
 \begin{figure}
 	\begin{center}
-		\includegraphics[width=2.5in]{td6.jpg}
+		\includegraphics[width=1.0\columnwidth]{td6.jpg}
 	\caption{Titov-Demoulin model, AMR result.}
 	\label{figure:td}
 	\end{center}
@@ -203,12 +217,11 @@ Several benchmarks (MHD Blast, Orszag-Tang vortex) - \ref{figure:blastFinal}, \r
 
 
 \section{Conclusion}
-The goal of this work has been accomplished, and a software package implementing the discontinuous Galerkin method for MHD equations, together with AMR functionality, and without presence of artificial parameters in the implemented algorithms, was implemented. Further work in employing the software for solution of MHD problems in astrophysics is being done.
+The goal of this work has been accomplished, and a software package implementing the discontinuous Galerkin method for MHD equations, together with AMR functionality, and without presence of artificial parameters in the implemented algorithms, was implemented. Further work in employing the software for solution of more MHD problems in astrophysics is being done.
 
 % use section* for acknowledgment
 \section*{Acknowledgment}
-The authors would like to thank...
-
+This research has been supported by the Ministry of Education, Youth and Sports of the Czech Republic under the RICE – New Technologies and Concepts for Smart Industrial Systems, project No. LO1607.
 
 % Can use something like this to put references on a page
 % by themselves when using endfloat and the captionsoff option.
@@ -231,14 +244,14 @@ The authors would like to thank...
 % (used to reserve space for the reference number labels box)
 \bibliographystyle{ieeetran}
 \bibliography{8-bibliography}
-
-\begin{IEEEbiographynophoto}{Lukas Korous}
-Biography text here.
-\end{IEEEbiographynophoto}
-
-\begin{IEEEbiographynophoto}{Pavel Karban}
-Biography text here.
-\end{IEEEbiographynophoto}
+%
+%\begin{IEEEbiographynophoto}{Lukas Korous}
+%Biography text here.
+%\end{IEEEbiographynophoto}
+%
+%\begin{IEEEbiographynophoto}{Pavel Karban}
+%Biography text here.
+%\end{IEEEbiographynophoto}
 
 \end{document}
 
